@@ -1,6 +1,7 @@
 from pyspark import SparkContext
 from os import listdir
 from pprint import pprint
+import re
 
 sc = SparkContext("local", "asm4")
 
@@ -42,21 +43,29 @@ for f in list_file:
 stop_word = set(['in', 'on', 'of', 'out', 'by', 'from', 'to', 'over', 'under', 'the', 'a', 'an', 'when', 'where', 'what', 'who', 'whom', 'you', 'thou', 'go', 'must', 'i', 'me', 'my', 'myself', 'for', 'and', 'x', 'it', 'are', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'be', 'thi', 'with', 'this', 'that', 'or', 'if', 'have', 't', 'an', 'db', 'but', 'at', 'wa', 'they', 'will', 'can', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'one', 'zero',
                  'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'do', 'did', 'here', 'there', 'all', 'subject', 'about', 'we', 'other', 'no', 're', 'ha', 'which', 'your', 'so', 'would', 'some', 'their', 'he', 'any', 'more', 'how', 'only', 'may', 'might', 'also', 'new', 'should', 'up', 'hi', 'dear', 'them', 'then', 'first', 'second', 'third', 'don', 'doe', 'were', 'know', 'than', 'less', 'most', 'get', 'year', 'like', 'been', 'use', 'many', ' few', 'little', 'just', 'make', 'these', 'those', 'because', 'not', 'into'])
 
+# util function to normalize case
+def normalize_case(line):
+    return re.sub(r'[^a-z]', ' ', line.lower().strip()).strip()
+
 # step 0: convert to lowercase
-training_rdd = training_rdd.map(lambda x: x.lower().strip())
+training_rdd = training_rdd.map(normalize_case).distinct()
+
+# util function to split sentence to word and also strip out empty word
+def split_sentence_and_strip_empty_word(line):
+    return list(filter(lambda x: "" != x, line.split(" ")))
 
 # step 1-1: load all words to RDD
 # step 1-2: filter out stop keyword
 # step 1-3: convert to tuple for counting
 # step 1-4: count by key
 # step 1-5: take top 200 largest frequency
-top_frequency_word = training_rdd.flatMap(lambda x: x.split(" ")) \
+top_frequency_word = training_rdd.flatMap(split_sentence_and_strip_empty_word) \
     .filter(lambda x: x not in stop_word) \
     .map(lambda x: (x, 1)) \
     .reduceByKey(lambda x, y: x+y) \
     .takeOrdered(200, lambda x: -x[1])
 
-print([x[0] for x in top_frequency_word])
+pprint(top_frequency_word)
 
 # stop bigram
 stop_bigram = set(['of the', 'x x', 'in the', 'to the', 'it i', 'on the', 'to be', 'for the', 'i a', 'subject re', 'and the', 'if you', 'don t', 'that the', 'in article', '0 1', '1 1', 'from the', 'thi i', 'with the', 'i not', 'it ', 'i the', 'the same', 'in a', 'of a', 'that i', 'for a', 'by the', 'will be', 'i m', 'i have', 'there i', 'the first', 'you are', 'with a', 'n x', 'a a', 'what i', 'doe not', 'to a', 'at the', 'do not', 'would be', 'can be', 'there are', '1 0', 'i am', 'they are', 'are not', 'you can', 'on a', 'and i', 'should be', 'may be', 'and a', 'have a', 'have been', 'such a', 'number of', 'that you', 'i ve', 'about the', ' want to', 'that it', 'which i', 'the following', 'x printf', 'but i', 'i don', 'can t', 'x if', 'file x',
@@ -68,11 +77,11 @@ stop_bigram = set(['of the', 'x x', 'in the', 'to the', 'it i', 'on the', 'to be
 # step 2-4: convert to tuple for counting
 # step 2-5: count by key
 # step 2-6: take top 100 largest frequency
-top_frequency_bigram = training_rdd.map(lambda x: x.split(" ")) \
+top_frequency_bigram = training_rdd.map(split_sentence_and_strip_empty_word) \
     .flatMap(lambda x: zip(x, x[1:])).map(lambda x: x[0] + " " + x[1]) \
     .filter(lambda x: x not in stop_bigram) \
     .map(lambda x: (x, 1)) \
     .reduceByKey(lambda x, y: x+y) \
     .takeOrdered(100, lambda x: -x[1])
 
-print([x[0] for x in top_frequency_bigram])
+pprint(top_frequency_bigram)
